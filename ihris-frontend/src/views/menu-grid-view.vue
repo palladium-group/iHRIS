@@ -113,6 +113,7 @@ export default {
           this.selectedTitle = this.nav.menu[id].text
           this.selectedNav = this.nav.menu[id].menu
           this.menu = []
+          this.nestedNav = []
           for (let menu_id of Object.keys(this.selectedNav)) {
             if (this.selectedNav[menu_id].menu) {
               let menu = {[menu_id]: this.selectedNav[menu_id]}
@@ -139,9 +140,29 @@ export default {
               this.menu.push(entry)
             }
           }
-          this.menu.sort((a, b) => Number(a.order) === Number(b.order) ? 0 : (Number(a.order) < Number(b.order) ? -1 : 1))
+          this.menu.sort((a, b) => this.orderCompare(a.order, b.order, a.text, b.text))
+          this.nestedNav.sort((a, b) => {
+            let ka = Object.keys(a)[0]
+            let kb = Object.keys(b)[0]
+            return this.orderCompare(a[ka].order, b[kb].order, a[ka].text, b[kb].text)
+          })
         }
       }
+    },
+    // order takes precedence; items with no order sort after those that have
+    // one; ties (including both missing) fall back to alphabetical by the
+    // translated label. Shared by every menu level rendered on this page.
+    orderCompare: function (orderA, orderB, textA, textB) {
+      let numA = Number(orderA)
+      let numB = Number(orderB)
+      let hasA = orderA !== undefined && orderA !== null && !isNaN(numA)
+      let hasB = orderB !== undefined && orderB !== null && !isNaN(numB)
+      if (hasA && hasB) {
+        if (numA !== numB) return numA - numB
+      } else if (hasA !== hasB) {
+        return hasA ? -1 : 1
+      }
+      return this.$t(`App.menu.${textA}`).localeCompare(this.$t(`App.menu.${textB}`))
     },
     recursive: function (obj, name) {
       for (let key in obj) {
@@ -155,7 +176,10 @@ export default {
     renderNestedList: function (data) {
       let exclude = ["text", "url", "order","icon","color"]
       let result = '<ul  style=" list-style: none; font-weight: 600 font-size: 0.875rem;line-height: 1.5 text-transform: capitalize">';
-      for (let key in data) {
+      let keys = Object.keys(data)
+        .filter((key) => data.hasOwnProperty(key) && !exclude.includes(key))
+        .sort((a, b) => this.orderCompare(data[a]?.order, data[b]?.order, data[a]?.text, data[b]?.text))
+      for (let key of keys) {
         if (data.hasOwnProperty(key)) {
           if (!exclude.includes(key)) {
             if (data[key]?.url) {

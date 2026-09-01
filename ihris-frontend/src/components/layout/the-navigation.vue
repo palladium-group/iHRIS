@@ -159,7 +159,9 @@ export default {
                 menu: {}
               }
               entry.menu.push(sub)
-              entry.menu.sort((a, b) => a.text === b.text ? 0 : (a.text < b.text ? -1 : 1))
+            }
+            if (entry.menu) {
+              entry.menu.sort((a, b) => this.orderCompare(a.order, b.order, a.text, b.text))
             }
           } else if (this.nav.menu[menu_id].url) {
             entry.url = this.nav.menu[menu_id].url
@@ -168,7 +170,22 @@ export default {
 
         this.menu.push(entry)
       }
-      this.menu.sort((a, b) => Number(a.order) === Number(b.order) ? 0 : (Number(a.order) < Number(b.order) ? -1 : 1))
+      this.menu.sort((a, b) => this.orderCompare(a.order, b.order, a.text, b.text))
+    },
+    // order takes precedence; items with no order sort after those that have
+    // one; ties (including both missing) fall back to alphabetical by the
+    // translated label. Shared by every menu level in this drawer.
+    orderCompare: function (orderA, orderB, textA, textB) {
+      let numA = Number(orderA)
+      let numB = Number(orderB)
+      let hasA = orderA !== undefined && orderA !== null && !isNaN(numA)
+      let hasB = orderB !== undefined && orderB !== null && !isNaN(numB)
+      if (hasA && hasB) {
+        if (numA !== numB) return numA - numB
+      } else if (hasA !== hasB) {
+        return hasA ? -1 : 1
+      }
+      return this.$t(`App.menu.${textA}`).localeCompare(this.$t(`App.menu.${textB}`))
     }
   },
 }
