@@ -33,11 +33,11 @@
               >
                 <v-card-title
                     :prepend-icon="item.icon"
-                    :style="{ backgroundColor: defaultColor }"
+                    :style="{ backgroundColor: item.color ? item.color : defaultColor }"
                     class="white--text subtitle justify-center font-weight-bold  pa-1"
                     dark
                 >
-                  <v-icon class="mr-2" dark>{{ selectedIcon }}</v-icon>
+                  <v-icon class="mr-2" dark>{{ item.icon }}</v-icon>
                   {{ $t(`App.menu.${item.text}`) }}
                 </v-card-title>
                 <v-card-text v-if="item.description" align="justify"
@@ -124,7 +124,9 @@ export default {
                 id: menu_id,
                 text: this.selectedNav[menu_id].text,
                 order: this.selectedNav[menu_id].order,
-                url: this.selectedNav[menu_id].url
+                url: this.selectedNav[menu_id].url,
+                icon: this.selectedNav[menu_id].icon,
+                color: this.selectedNav[menu_id].color
               }
               if (this.selectedNav[menu_id]?.description) {
                 entry.description = this.selectedNav[menu_id].description

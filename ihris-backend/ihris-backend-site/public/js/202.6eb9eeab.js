@@ -1,0 +1,2 @@
+"use strict";(self["webpackChunkiHRIS_v5"]=self["webpackChunkiHRIS_v5"]||[]).push([[202,333],{55533:function(s,e,t){t.d(e,{Z:function(){return a}});var n=t(48085),i=t(73325),a=(0,i.Z)(n.Z).extend({name:"v-subheader",props:{inset:Boolean},render(s){return s("div",{staticClass:"v-subheader",class:{"v-subheader--inset":this.inset,...this.themeClasses},attrs:this.$attrs,on:this.$listeners},this.$slots.default)}})}}]);
+//# sourceMappingURL=202.6eb9eeab.js.map
