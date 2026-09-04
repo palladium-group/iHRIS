@@ -21,7 +21,7 @@
     "express-session": "^1.17.2",
     "fhir2es": "^5.0.13",
     "fhir2sql": "^1.0.5",
-    "fhirpath": "^2.9.0",
+    "fhirpath": "^5.2.0",
     "fsh-sushi": "^2.5.0",
     "googleapis": "^101.0.0",
     "handlebars": "^4.7.7",

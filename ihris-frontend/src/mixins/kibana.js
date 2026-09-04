@@ -4,7 +4,11 @@ export const kibana = {
     return {
       dashboards: [],
       ignoreDashboards: ["testing", "test", "Testing", "Test"],
-      tags: []
+      tags: [],
+      // Set when fetching tags/dashboards fails, so consumers can tell
+      // "no dashboards exist" apart from "the fetch failed" instead of
+      // both silently rendering as an empty list.
+      dashboardsLoadError: false
     }
   },
   methods: {
@@ -76,7 +80,8 @@ export const kibana = {
                   if(accept) {
                     this.dashboards.push({
                       id: dashboard.id,
-                      title: dashboard.attributes.title
+                      title: dashboard.attributes.title,
+                      description: dashboard.attributes.description || ''
                     })
                   }
                 } catch (error) {
@@ -103,7 +108,8 @@ export const kibana = {
                 if(accept) {
                   this.dashboards.push({
                     id: dashboard.id,
-                    title: dashboard.attributes.title
+                    title: dashboard.attributes.title,
+                    description: dashboard.attributes.description || ''
                   })
                 }
               } catch (error) {
@@ -127,7 +133,8 @@ export const kibana = {
             if(accept) {
               this.dashboards.push({
                 id: response.data.id,
-                title: response.data.attributes.title
+                title: response.data.attributes.title,
+                description: response.data.attributes.description || ''
               })
             }
           }
@@ -145,9 +152,11 @@ export const kibana = {
       this.getDashboards().then(() => {
         this.loading = false
       }).catch(() => {
+        this.dashboardsLoadError = true
         this.loading = false
       })
     }).catch(() => {
+      this.dashboardsLoadError = true
       this.loading = false
     })
   }
