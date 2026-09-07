@@ -6,7 +6,32 @@ Description:    "iHRIS Profile of the Basic resource to manage pages."
 * code = IhrisResourceCodeSystem#page
 * extension contains
       IhrisPageDisplay named display 1..1 MS and
-      IhrisPageSection named section 0..* MS
+      IhrisPageSection named section 0..* MS and
+      IhrisPageTask named task 0..1 MS
+
+Extension:      IhrisPageTask
+Id:             ihris-page-task
+Title:          "iHRIS Page Task"
+Description:    "iHRIS Page Task details."
+* ^context.type = #element
+* ^context.expression = "IhrisPage"
+* extension contains
+      view 0..1 MS and
+      create 0..1 MS and
+      update 0..1 MS and
+      delete 0..1 MS
+* extension[view].value[x] only id
+* extension[view].valueId 1..1 MS
+* extension[view].valueId ^label = "View Page Task"
+* extension[create].value[x] only id
+* extension[create].valueId 1..1 MS
+* extension[create].valueId ^label = "Create Page Task"
+* extension[update].value[x] only id
+* extension[update].valueId 1..1 MS
+* extension[update].valueId ^label = "Update Page Task"
+* extension[delete].value[x] only id
+* extension[delete].valueId 1..1 MS
+* extension[delete].valueId ^label = "Delete Page Task"
 
 Extension:      IhrisPageDisplay
 Id:             ihris-page-display
@@ -22,20 +47,16 @@ Description:    "iHRIS Page Display details."
       field 0..* MS and
       link 0..* MS and
       mount 0..* MS
-
 * extension[resource].value[x] only Reference
 * extension[resource].valueReference only Reference(StructureDefinition or CodeSystem)
 * extension[resource].valueReference 1..1 MS
 * extension[resource].valueReference ^label = "Primary Resource"
-
 * extension[search].value[x] only string
 * extension[search].valueString 1..1 MS
 * extension[search].valueString ^label = "Search Headers"
-
 * extension[filter].value[x] only string
 * extension[filter].valueString 1..1 MS
 * extension[filter].valueString ^label = "Search Filters"
-
 * extension[add].extension contains
       url 1..1 MS and
       icon 0..1 MS and
@@ -57,7 +78,6 @@ Description:    "iHRIS Page Display details."
 * extension[add].extension[task].value[x] only id
 * extension[add].extension[task].valueId MS
 * extension[add].extension[task].valueId ^label = "Tasks that has access to this button"
-
 * extension[mount].extension contains
       name 1..1 MS and
       fromref 1..1 MS
@@ -67,7 +87,6 @@ Description:    "iHRIS Page Display details."
 * extension[mount].extension[fromref].value[x] only string
 * extension[mount].extension[fromref].valueString MS
 * extension[mount].extension[fromref].valueString ^label = "Mount resource from reference"
-
 * extension[link].extension contains
       field 0..1 MS and
       text 1..1 MS and
@@ -102,11 +121,9 @@ Description:    "iHRIS Page Display details."
 * extension[link].extension[role].value[x] only id
 * extension[link].extension[role].valueId MS
 * extension[link].extension[role].valueId ^label = "Roles that has access to this button"
-
 * extension[link].extension[task].value[x] only id
 * extension[link].extension[task].valueId MS
 * extension[link].extension[task].valueId ^label = "Tasks that has access to this button"
-
 * extension[field].extension contains
       path 1..1 MS and
       type 0..1 MS and

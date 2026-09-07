@@ -236,6 +236,17 @@ router.get('/page/:page/:type?', function (req, res) {
         return res.status(401).json(outcomes.DENIED)
     }
     fhirAxios.read("Basic", page).then(async (resource) => {
+        let pageTasks = resource.extension.find((ext) => ext.url === 'http://ihris.org/fhir/StructureDefinition/ihris-page-task')
+        if(pageTasks) {
+            let readTaskId = pageTasks?.extension?.find((ext) => ext.url === 'read')?.valueId
+            if(readTaskId) {
+                let readTaskResource = await fhirAxios.read('Basic', readTaskId)
+                let readTaskName = readTaskResource.extension.find(ext => ext.url === 'http://ihris.org/fhir/StructureDefinition/ihris-basic-name')?.valueString
+                if(req.user.hasPermissionByName('special', 'special', readTaskName) !== true) {
+                    return res.status(401).json(outcomes.DENIED)
+                }
+            }
+        }
         let pageDisplay = resource.extension.find(ext => ext.url === "http://ihris.org/fhir/StructureDefinition/ihris-page-display")
 
         let pageResource = pageDisplay.extension.find(ext => ext.url === "resource").valueReference.reference
@@ -1084,172 +1095,182 @@ router.get('/questionnaire/:questionnaire/:page', async function (req, res) {
         return displayCondition
     }
     let links = []
-    await fhirAxios.read("Basic", page).then(async(resource) => {
-        let pageDisplay = resource.extension.find(ext => ext.url === "http://ihris.org/fhir/StructureDefinition/ihris-page-display")
+    let pageResource = await fhirAxios.read("Basic", page)
+    let pageDisplay = pageResource.extension.find(ext => ext.url === "http://ihris.org/fhir/StructureDefinition/ihris-page-display")
+    let pageTasks = pageResource.extension.find((ext) => ext.url === 'http://ihris.org/fhir/StructureDefinition/ihris-page-task')
+    if(pageTasks) {
+        let createTaskId = pageTasks?.extension?.find((ext) => ext.url === 'create')?.valueId
+        if(createTaskId) {
+            let createTaskResource = await fhirAxios.read('Basic', createTaskId)
+            let createTaskName = createTaskResource.extension.find(ext => ext.url === 'http://ihris.org/fhir/StructureDefinition/ihris-basic-name')?.valueString
+            if(req.user.hasPermissionByName('special', 'special', createTaskName) !== true) {
+                return res.status(401).json(outcomes.DENIED)
+            }
+        }
+    }
+    let pageResourceRef = pageDisplay.extension.find(ext => ext.url === "resource").valueReference.reference
+    primaryResourceDef = pageResourceRef
+    try {
+        pageDisplay.extension.filter(ext => ext.url === "field").map(ext => {
+            let path = ext.extension.find(subext => subext.url === "path").valueString
+            let type, readOnlyIfSet
+            try {
+                type = ext.extension.find(subext => subext.url === "type").valueString
+            } catch (err) {
+            }
+            try {
+                readOnlyIfSet = ext.extension.find(subext => subext.url === "readOnlyIfSet").valueBoolean
+            } catch (err) {
+            }
+            pageFields[path] = {type: type, readOnlyIfSet: readOnlyIfSet}
+        })
+    } catch (err) {
+    }
+    if (pageResourceRef.startsWith("CodeSystem")) {
 
-        let pageResource = pageDisplay.extension.find(ext => ext.url === "resource").valueReference.reference
-        primaryResourceDef = pageResource
+        await getProperties(pageResourceRef).then((resource) => {
+            if (resource.total !== 1) {
+                let outcome = {...outcomes.ERROR}
+                outcome.issue[0].diagnostics = "Unable to find codesystem: " + pageResourceRef + "."
+                return res.status(400).json(outcome)
+            }
+            resource = resource.entry[0].resource
+
+            const structure = fhirDefinition.parseCodeSystem(resource)
+            let structureKeys = Object.keys(structure)
+            primaryResourceType = structureKeys[0]
+            primaryResourceProfile = resource.url
+        }).catch(err => {
+            logger.error(err.message)
+            logger.error(err.stack)
+            return res.status(err.response.status).json(err.response.data)
+        })
+
+    } else if (pageResourceRef.startsWith("StructureDefinition")) {
+        await getDefinition(pageResourceRef).then((resource) => {
+            if (allowed !== true) {
+                // Can't think of a reason to have this level of permissions for
+                // StructureDefinitions, but just in case...
+                let objAllowed = req.user.hasPermissionByObject("read", resource)
+                if (objAllowed !== true) {
+                    // But don't allow field level restrictions.  It will complicated the requirements
+                    return res.status(401).json(outcomes.DENIED)
+                }
+            }
+
+            if (!resource.hasOwnProperty("snapshot")) {
+                let outcome = {...outcomes.ERROR}
+                outcome.issue[0].diagnostics = "StructureDefinitions must be saved with a snapshot."
+                return res.status(404).json(outcome)
+            }
+            const structure = fhirDefinition.parseStructureDefinition(resource)
+            let structureKeys = Object.keys(structure)
+            primaryResourceType = structureKeys[0]
+            primaryResourceProfile = resource.url
+
+        }).catch((err) => {
+            logger.error(err.message)
+            logger.error(err.stack)
+            //return res.status( err.response.status ).json( err.response.data )
+            return res.status(500).json({error: err.message})
+        })
+
+    } else {
+
+        let outcome = {...outcomes.ERROR}
+        outcome.issue[0].diagnostics = "Unknown resource type for page: " + pageResourceRef + "."
+        return res.status(400).json(outcome)
+
+    }
+    let pageSections = pageResource.extension.filter(ext => ext.url === "http://ihris.org/fhir/StructureDefinition/ihris-page-section")
+    for (let section of pageSections) {
+        let resourceExt, resource, linkfield, searchfield, searchfieldtarget
+        let name = section.extension.find(ext => ext.url === "name")?.valueString
         try {
-            pageDisplay.extension.filter(ext => ext.url === "field").map(ext => {
-                let path = ext.extension.find(subext => subext.url === "path").valueString
-                let type, readOnlyIfSet
+            resourceExt = section.extension.find(ext => ext.url === "resource").extension
+
+            resource = resourceExt.find(ext => ext.url === "resource").valueReference.reference
+            if (resource) {
+                linkfield = resourceExt.find(ext => ext.url === "linkfield").valueString
                 try {
-                    type = ext.extension.find(subext => subext.url === "type").valueString
+                    searchfield = resourceExt.find(ext => ext.url === "searchfield").valueString
+                    searchfieldtarget = resourceExt.find(ext => ext.url === "searchfieldtarget").valueString
                 } catch (err) {
                 }
-                try {
-                    readOnlyIfSet = ext.extension.find(subext => subext.url === "readOnlyIfSet").valueBoolean
-                } catch (err) {
-                }
-                pageFields[path] = {type: type, readOnlyIfSet: readOnlyIfSet}
-            })
+            }
+
         } catch (err) {
         }
-        if (pageResource.startsWith("CodeSystem")) {
 
-            await getProperties(pageResource).then((resource) => {
-                if (resource.total !== 1) {
-                    let outcome = {...outcomes.ERROR}
-                    outcome.issue[0].diagnostics = "Unable to find codesystem: " + pageResource + "."
-                    return res.status(400).json(outcome)
-                }
-                resource = resource.entry[0].resource
-
-                const structure = fhirDefinition.parseCodeSystem(resource)
-                let structureKeys = Object.keys(structure)
-                primaryResourceType = structureKeys[0]
-                primaryResourceProfile = resource.url
-            }).catch(err => {
-                logger.error(err.message)
-                logger.error(err.stack)
-                return res.status(err.response.status).json(err.response.data)
-            })
-
-        } else if (pageResource.startsWith("StructureDefinition")) {
-            await getDefinition(pageResource).then((resource) => {
-                if (allowed !== true) {
-                    // Can't think of a reason to have this level of permissions for
-                    // StructureDefinitions, but just in case...
-                    let objAllowed = req.user.hasPermissionByObject("read", resource)
-                    if (objAllowed !== true) {
-                        // But don't allow field level restrictions.  It will complicated the requirements
-                        return res.status(401).json(outcomes.DENIED)
-                    }
-                }
-
-                if (!resource.hasOwnProperty("snapshot")) {
-                    let outcome = {...outcomes.ERROR}
-                    outcome.issue[0].diagnostics = "StructureDefinitions must be saved with a snapshot."
-                    return res.status(404).json(outcome)
-                }
-                const structure = fhirDefinition.parseStructureDefinition(resource)
-                let structureKeys = Object.keys(structure)
-                primaryResourceType = structureKeys[0]
-                primaryResourceProfile = resource.url
-
-            }).catch((err) => {
-                logger.error(err.message)
-                logger.error(err.stack)
-                //return res.status( err.response.status ).json( err.response.data )
-                return res.status(500).json({error: err.message})
-            })
-
-        } else {
-
-            let outcome = {...outcomes.ERROR}
-            outcome.issue[0].diagnostics = "Unknown resource type for page: " + pageResource + "."
-            return res.status(400).json(outcome)
-
+        sections[name] = {
+            resource: resource,
+            linkfield: linkfield,
+            searchfield: searchfield,
+            searchfieldtarget: searchfieldtarget
         }
-        let pageSections = resource.extension.filter(ext => ext.url === "http://ihris.org/fhir/StructureDefinition/ihris-page-section")
-        for (let section of pageSections) {
-            let resourceExt, resource, linkfield, searchfield, searchfieldtarget
-            let name = section.extension.find(ext => ext.url === "name")?.valueString
-            try {
-                resourceExt = section.extension.find(ext => ext.url === "resource").extension
-
-                resource = resourceExt.find(ext => ext.url === "resource").valueReference.reference
-                if (resource) {
-                    linkfield = resourceExt.find(ext => ext.url === "linkfield").valueString
-                    try {
-                        searchfield = resourceExt.find(ext => ext.url === "searchfield").valueString
-                        searchfieldtarget = resourceExt.find(ext => ext.url === "searchfieldtarget").valueString
-                    } catch (err) {
-                    }
+    }
+    try {
+        let linkExts = pageDisplay.extension.filter(ext => ext.url === "link")
+        for (let linkExt of linkExts) {
+            let field, text, button, icon, linkclass
+            let displayIn = linkExt.extension.find(ext => ext.url === "displayIn")?.valueString
+            if(!displayIn || displayIn !== "questionnaire") {
+                continue
+            }
+            let roles = linkExt.extension.filter(ext => ext.url === "role")
+            let tasks = linkExt.extension.filter(ext => ext.url === "task")
+            if(roles.length > 0 || tasks.length > 0) {
+                let hasRole = roles.find((role) => {
+                    return req.user.roles.includes(role.valueId)
+                })
+                let hasTask
+                for(let task of tasks) {
+                    await fhirAxios.read("Basic", task.valueId).then((taskResource) => {
+                        let taskAttributes = taskResource?.extension?.find((ext) => {
+                            return ext.url === 'http://ihris.org/fhir/StructureDefinition/task-attributes'
+                        })
+                        let taskName = taskAttributes?.extension?.find((ext) => {
+                            return ext.url === 'instance'
+                        })?.valueId
+                        if(req.user?.permissions?.special?.special?.id[taskName] || req.user?.permissions?.special?.section?.id[taskName] || (req.user?.permissions["*"] && req.user?.permissions["*"]["*"])) {
+                            hasTask = true
+                        }
+                    })
                 }
+                if(!hasRole && !hasTask) {
+                    continue
+                }
+            }
+            let url = linkExt.extension.find(ext => ext.url === "url").valueUrl
 
+            try {
+                field = linkExt.extension.find(ext => ext.url === "field").valueString
+            } catch (err) {
+            }
+            try {
+                text = linkExt.extension.find(ext => ext.url === "text").valueString
+            } catch (err) {
+            }
+            try {
+                button = linkExt.extension.find(ext => ext.url === "button").valueBoolean
+            } catch (err) {
+            }
+            try {
+                icon = linkExt.extension.find(ext => ext.url === "icon").valueString
+            } catch (err) {
+            }
+            try {
+                linkclass = linkExt.extension.find(ext => ext.url === "class").valueString
             } catch (err) {
             }
 
-            sections[name] = {
-                resource: resource,
-                linkfield: linkfield,
-                searchfield: searchfield,
-                searchfieldtarget: searchfieldtarget
-            }
+            links.push({url: url, field: field, text: text, button: button, icon: icon, linkclass: linkclass})
+
         }
-        try {
-            let linkExts = pageDisplay.extension.filter(ext => ext.url === "link")
-            for (let linkExt of linkExts) {
-                let field, text, button, icon, linkclass
-                let displayIn = linkExt.extension.find(ext => ext.url === "displayIn")?.valueString
-                if(!displayIn || displayIn !== "questionnaire") {
-                    continue
-                }
-                let roles = linkExt.extension.filter(ext => ext.url === "role")
-                let tasks = linkExt.extension.filter(ext => ext.url === "task")
-                if(roles.length > 0 || tasks.length > 0) {
-                    let hasRole = roles.find((role) => {
-                        return req.user.roles.includes(role.valueId)
-                    })
-                    let hasTask
-                    for(let task of tasks) {
-                        await fhirAxios.read("Basic", task.valueId).then((taskResource) => {
-                            let taskAttributes = taskResource?.extension?.find((ext) => {
-                                return ext.url === 'http://ihris.org/fhir/StructureDefinition/task-attributes'
-                            })
-                            let taskName = taskAttributes?.extension?.find((ext) => {
-                                return ext.url === 'instance'
-                            })?.valueId
-                            if(req.user?.permissions?.special?.special?.id[taskName] || req.user?.permissions?.special?.section?.id[taskName] || (req.user?.permissions["*"] && req.user?.permissions["*"]["*"])) {
-                                hasTask = true
-                            }
-                        })
-                    }
-                    if(!hasRole && !hasTask) {
-                        continue
-                    }
-                }
-                let url = linkExt.extension.find(ext => ext.url === "url").valueUrl
 
-                try {
-                    field = linkExt.extension.find(ext => ext.url === "field").valueString
-                } catch (err) {
-                }
-                try {
-                    text = linkExt.extension.find(ext => ext.url === "text").valueString
-                } catch (err) {
-                }
-                try {
-                    button = linkExt.extension.find(ext => ext.url === "button").valueBoolean
-                } catch (err) {
-                }
-                try {
-                    icon = linkExt.extension.find(ext => ext.url === "icon").valueString
-                } catch (err) {
-                }
-                try {
-                    linkclass = linkExt.extension.find(ext => ext.url === "class").valueString
-                } catch (err) {
-                }
+    } catch (err) {
+    }
 
-                links.push({url: url, field: field, text: text, button: button, icon: icon, linkclass: linkclass})
-
-            }
-
-        } catch (err) {
-        }
-    })
     fhirAxios.read("Questionnaire", req.params.questionnaire).then(async (resource) => {
         let vueOutput = '<ihris-questionnaire :fhir-id="fhirId" field="' + primaryResourceType + '" profile="' + primaryResourceProfile + '" :edit=\"isEdit\" :view-page="viewPage" :constraints="constraints" url="' + resource.url + '" id="' + resource.id
             + '" title="' + resource.title

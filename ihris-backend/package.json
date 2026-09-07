@@ -19,7 +19,7 @@
     "express": "~4.16.1",
     "express-fileupload": "^1.4.0",
     "express-session": "^1.17.2",
-    "fhir2es": "^5.0.13",
+    "fhir2es": "^5.0.14",
     "fhir2sql": "^1.0.5",
     "fhirpath": "^5.2.0",
     "fsh-sushi": "^2.5.0",
